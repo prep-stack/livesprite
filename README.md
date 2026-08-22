@@ -12,6 +12,24 @@ python main.py
 
 Requires Python 3 with PyQt5 and requests (see requirements.txt).
 
+## Versions and updates
+
+The program version lives in `version.py`. The "Check for updates"
+button in the top bar asks GitHub for the newest release of
+`prep-stack/livesprite`; when a newer release exists the button turns
+into "Update now" and installs it in place. Updates never touch
+`config/` (session, positions, settings) or sprites the user added.
+
+### Releasing a new version (for the developer)
+
+1. Edit `version.py` and bump `VERSION`, e.g. to `"2.1.0"`
+2. Run `release.bat 2.1.0` - it builds the exe, zips it, commits, tags
+   `v2.1.0` and pushes to GitHub, then opens the release page
+3. On the release page: attach `dist\LiveSprite-v2.1.0.zip`, write some
+   release notes and press "Publish release"
+
+That's it - every installed copy of the program will offer the update.
+
 ## Build a .exe
 
 Double-click `build_exe.bat` (or run `pyinstaller LiveSprite.spec`).
