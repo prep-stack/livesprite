@@ -1,0 +1,59 @@
+{
+  "animations": {
+    "Nanashi_Mumei_O2_IdleAnim_left.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5
+    },
+    "Nanashi_Mumei_O2_IdleAnim_right.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5
+    },
+    "Nanashi_Mumei_O2_RunAnim_left.gif": {
+      "chance": 20,
+      "direction": "left",
+      "pixels": 5
+    },
+    "Nanashi_Mumei_O2_RunAnim_left_down.gif": {
+      "chance": 20,
+      "direction": "down_left",
+      "pixels": 4
+    },
+    "Nanashi_Mumei_O2_RunAnim_left_up.gif": {
+      "chance": 20,
+      "direction": "up_left",
+      "pixels": 4
+    },
+    "Nanashi_Mumei_O2_RunAnim_right.gif": {
+      "chance": 20,
+      "direction": "right",
+      "pixels": 5
+    },
+    "Nanashi_Mumei_O2_RunAnim_right_down.gif": {
+      "chance": 20,
+      "direction": "down_right",
+      "pixels": 4
+    },
+    "Nanashi_Mumei_O2_RunAnim_right_up.gif": {
+      "chance": 20,
+      "direction": "up_right",
+      "pixels": 4
+    },
+    "Nanashi_Mumei_RunAnim_right.gif": {
+      "chance": 0,
+      "direction": "right",
+      "pixels": 5
+    }
+  },
+  "live_animation": "Nanashi_Mumei_RunAnim_right.gif",
+  "twitch_channel": "",
+  "youtube_channel": "@destiny",
+  "preferred_platform": "twitch",
+  "hide_when_offline": false,
+  "edge_behavior": "wrap",
+  "allow_multi_screen": true,
+  "restricted_screens": [
+    0
+  ]
+}

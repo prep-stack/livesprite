@@ -1,0 +1,44 @@
+{
+  "animations": {
+    "soda_idle_left_small.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5
+    },
+    "soda_idle_right_small.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5
+    },
+    "soda_run_left_small.gif": {
+      "chance": 20,
+      "direction": "left",
+      "pixels": 5
+    },
+    "soda_run_right_small.gif": {
+      "chance": 20,
+      "direction": "right",
+      "pixels": 5
+    },
+    "soda_walk_left_small.gif": {
+      "chance": 20,
+      "direction": "left",
+      "pixels": 4
+    },
+    "soda_walk_right_small.gif": {
+      "chance": 20,
+      "direction": "right",
+      "pixels": 4
+    }
+  },
+  "live_animation": "soda_run_right_small.gif",
+  "twitch_channel": "",
+  "youtube_channel": "",
+  "preferred_platform": "twitch",
+  "hide_when_offline": false,
+  "edge_behavior": "wrap",
+  "allow_multi_screen": true,
+  "restricted_screens": [
+    0
+  ]
+}

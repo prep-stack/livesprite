@@ -1,0 +1,44 @@
+{
+  "animations": {
+    "Ninomae_Ina'nis_Idleright.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5
+    },
+    "Ninomae_Ina'nis_Runright.gif": {
+      "chance": 20,
+      "direction": "right",
+      "pixels": 5
+    },
+    "Ninomae_Ina'nis_Runrightdown.gif": {
+      "chance": 20,
+      "direction": "down_right",
+      "pixels": 5
+    },
+    "Ninomae_Inanis_Idleleft.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5
+    },
+    "Ninomae_Inanis_Runleft.gif": {
+      "chance": 20,
+      "direction": "left",
+      "pixels": 5
+    },
+    "Ninomae_Inanis_Runleftup.gif": {
+      "chance": 20,
+      "direction": "up_left",
+      "pixels": 5
+    }
+  },
+  "live_animation": null,
+  "twitch_channel": "",
+  "youtube_channel": "",
+  "preferred_platform": "twitch",
+  "hide_when_offline": false,
+  "edge_behavior": "wrap",
+  "allow_multi_screen": true,
+  "restricted_screens": [
+    0
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "animations": {
+    "Gawr_Gura_Idleleft.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5,
+      "speed": 100
+    },
+    "Gawr_Gura_Idleright.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5,
+      "speed": 100
+    },
+    "Gawr_Gura_Red_Run_right.gif": {
+      "chance": 0,
+      "direction": "right",
+      "pixels": 4,
+      "speed": 100
+    },
+    "Gawr_Gura_Runleft.gif": {
+      "chance": 20,
+      "direction": "left",
+      "pixels": 4,
+      "speed": 100
+    },
+    "Gawr_Gura_Runright.gif": {
+      "chance": 20,
+      "direction": "right",
+      "pixels": 4,
+      "speed": 100
+    }
+  },
+  "live_animation": "Gawr_Gura_Red_Run_right.gif",
+  "twitch_channel": "sodapoppin",
+  "youtube_channel": "",
+  "kick_channel": "",
+  "preferred_platform": "twitch",
+  "hide_when_offline": false,
+  "hide_when_notified": false,
+  "edge_behavior": "wrap",
+  "allow_multi_screen": true,
+  "restricted_screens": [
+    0
+  ]
+}

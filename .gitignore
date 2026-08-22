@@ -1,0 +1,16 @@
+# Personal data - never commit (updates must not touch these either)
+config/
+
+# Build output
+dist/
+build/
+__pycache__/
+*.pyc
+
+# Update machinery leftovers
+_update_staged/
+_finish_update.bat
+
+# Temp / test scratch files
+_*.py
+*.tmp

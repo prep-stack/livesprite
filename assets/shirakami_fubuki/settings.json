@@ -1,0 +1,39 @@
+{
+  "animations": {
+    "Kurokami_Fubuki_RunAnim.gif": {
+      "chance": 0,
+      "direction": "right",
+      "pixels": 5
+    },
+    "Shirakami_Fubuki_IdleAnim-ezgif.com-rotate.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5
+    },
+    "Shirakami_Fubuki_IdleAnim.gif": {
+      "chance": 20,
+      "direction": "none",
+      "pixels": 5
+    },
+    "Shirakami_Fubuki_RunAnim-ezgif.com-rotate.gif": {
+      "chance": 20,
+      "direction": "down_left",
+      "pixels": 5
+    },
+    "Shirakami_Fubuki_RunAnim.gif": {
+      "chance": 20,
+      "direction": "down_right",
+      "pixels": 5
+    }
+  },
+  "live_animation": null,
+  "twitch_channel": "",
+  "youtube_channel": "",
+  "preferred_platform": "twitch",
+  "hide_when_offline": false,
+  "edge_behavior": "wrap",
+  "allow_multi_screen": true,
+  "restricted_screens": [
+    0
+  ]
+}
