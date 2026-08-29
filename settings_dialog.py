@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+import theme
 from sprite_model import DIRECTIONS, EDGE_BEHAVIORS
 
 TABLE_PREVIEW_SIZE = 48   # preview height in the animations table
@@ -79,6 +80,7 @@ class SpriteSettingsDialog(QDialog):
         self.model = model
         self.setWindowTitle(f"Settings - {model.asset_dir}")
         self.resize(660, 720)
+        theme.dark_title_bar(self)
         self._previews = []  # all GifPreviewLabel widgets, stopped on close
 
         layout = QVBoxLayout(self)
@@ -236,6 +238,9 @@ class SpriteSettingsDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
+        ok_btn = buttons.button(QDialogButtonBox.Ok)
+        if ok_btn is not None:
+            ok_btn.setProperty("accent", True)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

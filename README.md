@@ -12,6 +12,13 @@ python main.py
 
 Requires Python 3 with PyQt5 and requests (see requirements.txt).
 
+## Look and feel
+
+Since v2.1.0 the whole UI uses a modern dark theme (deep navy background,
+purple accents) defined in `theme.py`. It is a single Qt Style Sheet
+applied in `main.py` - purely cosmetic, so removing the
+`theme.apply(app)` line restores the classic system look.
+
 ## Versions and updates
 
 The program version lives in `version.py`. The "Check for updates"
@@ -110,5 +117,6 @@ A PNG in the folder is used as the icon in the manager list.
 | `main_window.py` | the manager window (preview panels, global actions) + session restore |
 | `tray.py` | system tray icon with quick actions |
 | `settings_dialog.py` | per-sprite settings UI |
+| `theme.py` | modern dark theme (colors + Qt stylesheet, pure cosmetics) |
 | `soda.png` / `soda.ico` | application icon (window, tray and exe) |
 | `_migrate_old_settings.py` | one-off import of old AppData settings (safe to delete) |

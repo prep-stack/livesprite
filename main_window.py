@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
 )
 
 import autostart
+import theme
 from config import (
     APP_NAME, ASSETS_DIR, ICON_FILE, SESSION_FILE, SETTINGS_FILE,
     load_json, save_json,
@@ -86,13 +87,19 @@ class PreviewItemWidget(QWidget):
         layout.addWidget(preview)
 
         self.subtitle = subtitle  # raw subtitle text (used by tests/tools)
-        # Make LIVE stand out in red
+        # Make LIVE stand out in red; the rest of the subtitle is muted
         subtitle_html = subtitle.replace(
-            "LIVE", "<span style='color:#e91916;font-weight:bold'>LIVE</span>"
+            "LIVE",
+            f"<span style='color:{theme.LIVE_RED};font-weight:bold'>"
+            "LIVE</span>",
         )
         text = QLabel(
             f"<b>{asset_dir}</b>"
-            + (f"<br><small>{subtitle_html}</small>" if subtitle else "")
+            + (
+                f"<br><small style='color:{theme.MUTED}'>"
+                f"{subtitle_html}</small>"
+                if subtitle else ""
+            )
         )
         layout.addWidget(text, 1)
 
@@ -138,6 +145,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon(ICON_FILE))
         self.resize(680, 560)
+        theme.dark_title_bar(self)
 
         central = QWidget(self)
         self.setCentralWidget(central)
@@ -162,6 +170,7 @@ class MainWindow(QMainWindow):
             lambda: webbrowser.open("https://www.reddit.com/r/livesprites/")
         )
         self.update_btn = QPushButton("Check for updates")
+        self.update_btn.setProperty("link", True)
         self.update_btn.clicked.connect(self._on_update_clicked)
         top_bar.addWidget(assets_btn)
         top_bar.addWidget(info_btn)
@@ -183,16 +192,40 @@ class MainWindow(QMainWindow):
         panels = QHBoxLayout()
 
         left_box = QVBoxLayout()
-        left_box.addWidget(QLabel("<b>Assets</b> (double-click to add)"))
+        left_header = QHBoxLayout()
+        left_header.addWidget(QLabel(
+            f"<b>Assets</b> <span style='color:{theme.MUTED}'>"
+            "(double-click to add)</span>"
+        ))
+        left_header.addStretch()
+        add_round_btn = QPushButton("+")
+        add_round_btn.setObjectName("roundAccentBtn")
+        add_round_btn.setFixedSize(26, 26)
+        add_round_btn.setToolTip("Add the selected sprite to the desktop")
+        add_round_btn.clicked.connect(self._add_selected)
+        left_header.addWidget(add_round_btn)
+        left_box.addLayout(left_header)
         self.asset_list = QListWidget(self)
         self.asset_list.itemDoubleClicked.connect(self._add_item)
         left_box.addWidget(self.asset_list)
         panels.addLayout(left_box)
 
         right_box = QVBoxLayout()
-        right_box.addWidget(
-            QLabel("<b>Active gifs</b> (double-click to remove)")
+        right_header = QHBoxLayout()
+        right_header.addWidget(QLabel(
+            f"<b>Active gifs</b> <span style='color:{theme.MUTED}'>"
+            "(double-click to remove)</span>"
+        ))
+        right_header.addStretch()
+        remove_round_btn = QPushButton("\U0001F5D1")  # wastebasket
+        remove_round_btn.setObjectName("roundNeutralBtn")
+        remove_round_btn.setFixedSize(26, 26)
+        remove_round_btn.setToolTip(
+            "Remove the selected sprite from the desktop"
         )
+        remove_round_btn.clicked.connect(self._remove_selected)
+        right_header.addWidget(remove_round_btn)
+        right_box.addLayout(right_header)
         self.active_list = QListWidget(self)
         self.active_list.itemDoubleClicked.connect(self._remove_item)
         right_box.addWidget(self.active_list)
@@ -203,10 +236,12 @@ class MainWindow(QMainWindow):
         # -- per-sprite buttons --------------------------------------------
         buttons = QHBoxLayout()
         add_btn = QPushButton("Add →")
+        add_btn.setProperty("accent", True)
         add_btn.clicked.connect(self._add_selected)
         remove_btn = QPushButton("← Remove")
         remove_btn.clicked.connect(self._remove_selected)
         settings_btn = QPushButton("Settings...")
+        settings_btn.setProperty("accent", True)
         settings_btn.clicked.connect(self._edit_selected)
         refresh_btn = QPushButton("Refresh")
         refresh_btn.clicked.connect(self.refresh_lists)

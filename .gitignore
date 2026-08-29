@@ -13,4 +13,5 @@ _finish_update.bat
 
 # Temp / test scratch files
 _*.py
+_*.png
 *.tmp

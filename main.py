@@ -16,6 +16,7 @@ import sys
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication
 
+import theme
 from config import APP_NAME, ICON_FILE
 from main_window import MainWindow
 from stream_service import StreamService
@@ -34,6 +35,8 @@ def main():
     app.setWindowIcon(QIcon(ICON_FILE))
     # The app lives in the system tray: closing windows must not quit it
     app.setQuitOnLastWindowClosed(False)
+    # Modern dark theme (pure cosmetics - remove this line for old look)
+    theme.apply(app)
 
     streams = StreamService()
     streams.start()
