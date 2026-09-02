@@ -73,9 +73,11 @@ anywhere and run the exe.
   it jumps to the next allowed screen in its direction of travel.
   Edge behavior can be `wrap` (default, pass through one edge and appear
   on the other side), `bounce` or `stop`.
-- **Start with Windows**: on by default (checkbox in the manager window).
-  Uses the per-user registry Run key, no admin rights needed. Whichever
-  version you run (script or exe) registers itself.
+- **Start with Windows**: on by default. Uses the per-user registry Run
+  key, no admin rights needed. The checkbox in the manager window only
+  appears when autostart is actually off (checked against the registry) -
+  tick it and it registers and disappears again. Turning autostart off
+  is done from the tray menu ("Start with Windows" toggle).
 - **Remembered positions**: when you drag a sprite somewhere, that spot
   is remembered permanently (in `config/session.json` under
   `positions`). The sprite spawns there on every program start, and even
@@ -84,9 +86,12 @@ anywhere and run the exe.
 - **Live notification**: set a Twitch channel (e.g. `sodapoppin`), a
   YouTube channel (e.g. `@handle`) and/or a Kick channel (e.g. `xqc`),
   pick the preferred platform and a "live animation". The channel is
-  checked every 60 seconds in the background (Twitch/YouTube via
-  decapi.me, Kick via its public channel API - no API keys needed
-  anywhere). When the streamer goes
+  checked about every 60 seconds (with a random +/- 15 s jitter) in the
+  background (Twitch via decapi.me, Kick via its public channel API - no
+  API keys needed anywhere). For YouTube there are two selectable check
+  methods in the settings: **DecAPI** (default) or **Web scrape**, which
+  loads `youtube.com/<handle>/live` directly and looks for the live
+  marker - usually more reliable. When the streamer goes
   live the sprite switches to the live animation and stays in it until
   you double-click the sprite, which opens the stream page in your
   browser (a single click does nothing, so you can't open it by

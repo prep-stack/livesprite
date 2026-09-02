@@ -71,7 +71,9 @@ class SpriteWindow(QWidget):
         # Track the sprite's channel so the poller checks it
         chan = self.model.stream_channel()
         if chan:
-            self.streams.track(*chan)
+            self.streams.track(
+                *chan, youtube_method=self.model.youtube_check_method
+            )
             self.streams.status_changed.connect(self._on_stream_status)
 
         # Movement loop

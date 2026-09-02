@@ -7,8 +7,12 @@ Stream status service for Twitch and YouTube.
 Uses the free DecAPI service (same as the old program):
   Twitch : https://decapi.me/twitch/uptime/<channel>
            -> "<channel> is offline" when offline, an uptime string when live.
-  YouTube: compare latest_video with and without no_livestream=1;
-           different answers mean the channel is currently live.
+  YouTube: two selectable methods (per sprite):
+           * "decapi" (default): compare latest_video with and without
+             no_livestream=1; different answers mean the channel is live.
+           * "scrape": fetch https://www.youtube.com/<handle>/live with a
+             browser User-Agent and look for '"isLive":true' in the HTML
+             (guarding against '"isUpcoming":true' for scheduled streams).
 
 All network requests run on a background thread; results are delivered to
 the UI thread through a Qt signal.  The service also tracks per-channel
@@ -22,6 +26,7 @@ service starts empty), so the user is notified again on the next stream.
 """
 
 import logging
+import random
 import threading
 import time
 from urllib.parse import urlparse
@@ -32,6 +37,21 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from config import STREAM_CHECK_INTERVAL_S
 
 logger = logging.getLogger(__name__)
+
+# Realistic browser headers so YouTube/Kick don't block us as a bot.
+BROWSER_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/124.0 Safari/537.36"),
+    "Accept-Language": "en-US,en;q=0.9",
+}
+# Cookies that skip YouTube's EU cookie-consent wall, which would
+# otherwise redirect the /live request to consent.youtube.com.
+YOUTUBE_COOKIES = {"CONSENT": "YES+", "SOCS": "CAI"}
+
+# Random +/- jitter (seconds) added to every poll interval so the
+# requests don't land on an exact clockwork schedule (bot-friendly).
+POLL_JITTER_S = 15
 
 
 def parse_youtube_channel(channel_input):
@@ -77,18 +97,27 @@ class StreamService(QObject):
         self._notified = set()  # channels notified this live session
         self._visited = set()   # channels visited (clicked) this live session
         self._offline_seen = {}  # (platform, channel) -> consecutive offline count
+        self._yt_method = {}    # (platform, channel) -> "decapi" or "scrape"
         self._session = requests.Session()
         self._stop = threading.Event()
         self._thread = None
 
     # -- subscriptions ------------------------------------------------------
-    def track(self, platform, channel):
-        """Start tracking a channel (idempotent)."""
+    def track(self, platform, channel, youtube_method="decapi"):
+        """Start tracking a channel (idempotent).
+
+        `youtube_method` selects how YouTube channels are checked:
+        "decapi" (default) or "scrape" (the channel's /live page).
+        """
         key = self._key(platform, channel)
         if not key:
             return
         with self._lock:
             self._channels[key] = self._channels.get(key, 0) + 1
+            if key[0] == "youtube":
+                self._yt_method[key] = (
+                    "scrape" if youtube_method == "scrape" else "decapi"
+                )
         self._ensure_thread()
 
     def untrack(self, platform, channel):
@@ -102,6 +131,7 @@ class StreamService(QObject):
                 if self._channels[key] <= 0:
                     del self._channels[key]
                     self._status.pop(key, None)
+                    self._yt_method.pop(key, None)
 
     # -- status queries (UI thread safe, never block) -------------------------
     def is_live(self, platform, channel):
@@ -154,8 +184,13 @@ class StreamService(QObject):
                 if self._stop.is_set():
                     return
                 self._check_channel(key)
-            # Sleep in small slices so stop() reacts quickly
-            for _ in range(STREAM_CHECK_INTERVAL_S * 2):
+            # Sleep ~60s +/- random jitter so the checks don't run on an
+            # exact clockwork schedule (looks less bot-like to servers).
+            # Sleep in small slices so stop() reacts quickly.
+            wait_s = STREAM_CHECK_INTERVAL_S + random.uniform(
+                -POLL_JITTER_S, POLL_JITTER_S
+            )
+            for _ in range(max(2, int(wait_s * 2))):
                 if self._stop.is_set():
                     return
                 time.sleep(0.5)
@@ -168,7 +203,12 @@ class StreamService(QObject):
             elif platform == "kick":
                 is_live = self._check_kick(channel)
             else:
-                is_live = self._check_youtube(channel)
+                with self._lock:
+                    method = self._yt_method.get(key, "decapi")
+                if method == "scrape":
+                    is_live = self._check_youtube_scrape(channel)
+                else:
+                    is_live = self._check_youtube(channel)
         except requests.RequestException as e:
             logger.warning("Network error checking %s/%s: %s", platform, channel, e)
             return  # keep last known status on network problems
@@ -234,6 +274,49 @@ class StreamService(QObject):
             )
         # Different answers => a livestream is the latest "video" => live now
         return with_live.text.strip() != without_live.text.strip()
+
+    def _check_youtube_scrape(self, channel):
+        """Check YouTube by scraping the channel's /live page.
+
+        When a channel is live, youtube.com/<handle>/live serves (or
+        redirects to) the watch page whose player data contains
+        '"isLive":true'.  Scheduled premieres/streams also get a watch
+        page but carry '"isUpcoming":true' instead, so those must not
+        count as live.  Browser headers avoid the bot filter and the
+        CONSENT/SOCS cookies skip the EU cookie-consent redirect.
+        """
+        handle = parse_youtube_channel(channel)
+        if not handle.startswith("@") and not handle.startswith("UC"):
+            handle = "@" + handle
+        if handle.startswith("UC") and len(handle) >= 20:
+            url = f"https://www.youtube.com/channel/{handle}/live"
+        else:
+            url = f"https://www.youtube.com/{handle}/live"
+        resp = self._session.get(
+            url, headers=BROWSER_HEADERS, cookies=YOUTUBE_COOKIES,
+            timeout=15, allow_redirects=True,
+        )
+        if resp.status_code == 429:
+            # Rate limited - back off by keeping the last known status.
+            raise requests.RequestException(
+                "YouTube rate limit (429 Too Many Requests)"
+            )
+        if resp.status_code == 404:
+            return False  # channel does not exist -> treat as offline
+        if resp.status_code != 200:
+            raise requests.RequestException(
+                f"YouTube /live status {resp.status_code}"
+            )
+        if "consent.youtube.com" in resp.url:
+            # Consent wall instead of the channel page - can't tell the
+            # status, keep the last known one.
+            raise requests.RequestException(
+                "YouTube consent wall blocked the /live page"
+            )
+        html = resp.text
+        if '"isUpcoming":true' in html:
+            return False  # scheduled stream/premiere, not live yet
+        return '"isLive":true' in html
 
     def _check_kick(self, channel):
         """Check Kick via its public channel API.

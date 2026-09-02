@@ -137,10 +137,16 @@ class MainWindow(QMainWindow):
         # Remembered drag positions per sprite; survives remove/re-add
         self.session.setdefault("positions", {})
 
-        # App settings (autostart on by default)
+        # App settings (autostart on by default on the very first run)
         self.app_settings = load_json(SETTINGS_FILE, default={}) or {}
-        self.app_settings.setdefault("autostart", True)
-        autostart.apply(self.app_settings["autostart"])
+        if "autostart" not in self.app_settings:
+            # First run: register autostart once.  After that the real
+            # registry state is the truth, not the saved setting.
+            self.app_settings["autostart"] = True
+            autostart.enable()
+        elif self.app_settings["autostart"] and autostart.is_enabled():
+            # Refresh the registered command in case the exe moved
+            autostart.enable()
 
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon(ICON_FILE))
@@ -266,10 +272,17 @@ class MainWindow(QMainWindow):
         layout.addLayout(global_buttons)
 
         # -- app options ----------------------------------------------------
-        self.autostart_check = QCheckBox("Start with Windows")
-        self.autostart_check.setChecked(self.app_settings["autostart"])
+        # The "Start with Windows" checkbox is a reminder that only shows
+        # up when the program is NOT registered to start with Windows.
+        # Ticking it registers autostart and the checkbox disappears.
+        # (Autostart can be turned off again from the tray menu.)
+        self.autostart_check = QCheckBox(
+            "Start with Windows (currently off - click to enable)"
+        )
+        self.autostart_check.setChecked(False)
         self.autostart_check.toggled.connect(self._on_autostart_toggled)
         layout.addWidget(self.autostart_check)
+        self.refresh_autostart_ui()
 
         self.status_label = QLabel("")
         layout.addWidget(self.status_label)
@@ -584,11 +597,49 @@ class MainWindow(QMainWindow):
             self._fs_watcher.addPath(ASSETS_DIR)
 
     # -- app options ----------------------------------------------------------
+    def refresh_autostart_ui(self):
+        """Show the autostart checkbox only when autostart is really off.
+
+        Asks the registry directly - when the program is registered to
+        start with Windows there is nothing to remind the user about, so
+        the checkbox is hidden.
+        """
+        registered = autostart.is_enabled()
+        self.autostart_check.setVisible(not registered)
+        if not registered:
+            self.autostart_check.blockSignals(True)
+            self.autostart_check.setChecked(False)
+            self.autostart_check.blockSignals(False)
+
     def _on_autostart_toggled(self, checked):
-        self.app_settings["autostart"] = checked
+        if not checked:
+            return
+        autostart.enable()
+        # Trust only the registry: hide the checkbox when the entry is
+        # really there now, keep it visible when the write failed.
+        if autostart.is_enabled():
+            self.app_settings["autostart"] = True
+            save_json(SETTINGS_FILE, self.app_settings)
+            self.status_label.setText("Start with Windows enabled")
+            logger.info("Autostart enabled via checkbox")
+        else:
+            self.status_label.setText(
+                "Could not enable Start with Windows (registry error)"
+            )
+            logger.error("Autostart registration failed")
+        self.refresh_autostart_ui()
+
+    def set_autostart(self, enabled):
+        """Enable/disable autostart (used by the tray menu toggle)."""
+        if enabled:
+            autostart.enable()
+        else:
+            autostart.disable()
+        self.app_settings["autostart"] = autostart.is_enabled()
         save_json(SETTINGS_FILE, self.app_settings)
-        autostart.apply(checked)
-        logger.info("Autostart %s", "enabled" if checked else "disabled")
+        self.refresh_autostart_ui()
+        logger.info("Autostart %s via tray",
+                    "enabled" if enabled else "disabled")
 
     # -- session ------------------------------------------------------------
     def _restore_session(self):
@@ -612,6 +663,12 @@ class MainWindow(QMainWindow):
         # Rebuild the lists so the LIVE/offline subtitle under each
         # active gif reflects the new status immediately.
         self.refresh_lists()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Re-check the registry every time the manager (re)appears, in
+        # case autostart was changed externally (tray menu, Task Manager).
+        self.refresh_autostart_ui()
 
     # -- shutdown --------------------------------------------------------------
     def closeEvent(self, event):

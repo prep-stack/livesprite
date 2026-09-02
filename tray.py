@@ -22,6 +22,7 @@ import logging
 from PyQt5.QtGui import QGuiApplication, QIcon
 from PyQt5.QtWidgets import QAction, QApplication, QMenu, QSystemTrayIcon
 
+import autostart
 from config import APP_NAME, ICON_FILE
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,18 @@ class TrayIcon(QSystemTrayIcon):
         self.restrict_menu = QMenu("Restrict all active gifs", self.menu)
         self.restrict_menu.aboutToShow.connect(self._rebuild_restrict_menu)
         self.menu.addMenu(self.restrict_menu)
+
+        self.menu.addSeparator()
+
+        # Start-with-Windows toggle.  The manager window only shows its
+        # checkbox while autostart is off, so this menu entry is the way
+        # to turn autostart off again.  Synced right before the menu
+        # opens so it always reflects the real registry state.
+        self.autostart_action = QAction("Start with Windows", self.menu)
+        self.autostart_action.setCheckable(True)
+        self.autostart_action.triggered.connect(self._on_autostart_toggled)
+        self.menu.addAction(self.autostart_action)
+        self.menu.aboutToShow.connect(self._sync_autostart_action)
 
         self.menu.addSeparator()
         quit_action = QAction("Quit", self.menu)
@@ -95,6 +108,14 @@ class TrayIcon(QSystemTrayIcon):
         clear = QAction("Clear all screen restrictions", self.restrict_menu)
         clear.triggered.connect(self.main_window.clear_screen_restrictions_all)
         self.restrict_menu.addAction(clear)
+
+    def _sync_autostart_action(self):
+        self.autostart_action.blockSignals(True)
+        self.autostart_action.setChecked(autostart.is_enabled())
+        self.autostart_action.blockSignals(False)
+
+    def _on_autostart_toggled(self, checked):
+        self.main_window.set_autostart(checked)
 
     def _quit(self):
         self.main_window.quit_requested = True

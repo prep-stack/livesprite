@@ -26,7 +26,7 @@ import theme
 from sprite_model import DIRECTIONS, EDGE_BEHAVIORS
 
 TABLE_PREVIEW_SIZE = 48   # preview height in the animations table
-LIVE_PREVIEW_SIZE = 80    # preview height next to the live-animation picker
+LIVE_PREVIEW_SIZE = 56    # preview height next to the live-animation picker
 
 
 class GifPreviewLabel(QLabel):
@@ -79,7 +79,7 @@ class SpriteSettingsDialog(QDialog):
         super().__init__(parent)
         self.model = model
         self.setWindowTitle(f"Settings - {model.asset_dir}")
-        self.resize(660, 720)
+        self.resize(660, 780)
         theme.dark_title_bar(self)
         self._previews = []  # all GifPreviewLabel widgets, stopped on close
 
@@ -88,6 +88,9 @@ class SpriteSettingsDialog(QDialog):
         # -- stream settings ------------------------------------------------
         stream_group = QGroupBox("Live stream tracking")
         form = QFormLayout(stream_group)
+        # Keep this group compact so the animations table below gets
+        # as much room as possible.
+        form.setVerticalSpacing(6)
 
         self.twitch_edit = QLineEdit(model.twitch_channel)
         self.twitch_edit.setPlaceholderText("e.g. sodapoppin")
@@ -96,6 +99,21 @@ class SpriteSettingsDialog(QDialog):
         self.youtube_edit = QLineEdit(model.youtube_channel)
         self.youtube_edit.setPlaceholderText("e.g. @handle or channel URL")
         form.addRow("YouTube channel:", self.youtube_edit)
+
+        self.youtube_method_combo = QComboBox()
+        self.youtube_method_combo.addItem("DecAPI (default)", "decapi")
+        self.youtube_method_combo.addItem("Web scrape (/live page)", "scrape")
+        self.youtube_method_combo.setToolTip(
+            "How the YouTube channel is checked for a livestream:\n"
+            "- DecAPI: uses the decapi.me service (may miss some streams)\n"
+            "- Web scrape: loads youtube.com/<handle>/live directly and\n"
+            "  looks for the live marker - usually more reliable"
+        )
+        method_idx = self.youtube_method_combo.findData(
+            model.youtube_check_method
+        )
+        self.youtube_method_combo.setCurrentIndex(max(method_idx, 0))
+        form.addRow("YouTube check:", self.youtube_method_combo)
 
         self.kick_edit = QLineEdit(model.kick_channel)
         self.kick_edit.setPlaceholderText("e.g. xqc")
@@ -169,6 +187,8 @@ class SpriteSettingsDialog(QDialog):
             TABLE_PREVIEW_SIZE + 8
         )
         self.table.setColumnWidth(0, TABLE_PREVIEW_SIZE * 2)
+        # Make sure at least ~4 rows are visible without scrolling
+        self.table.setMinimumHeight((TABLE_PREVIEW_SIZE + 8) * 4 + 40)
 
         for row, (name, anim) in enumerate(model.animations.items()):
             preview = GifPreviewLabel(TABLE_PREVIEW_SIZE)
@@ -207,7 +227,9 @@ class SpriteSettingsDialog(QDialog):
             preview.set_speed(anim.speed)
             self.table.setCellWidget(row, 4, speed)
         anim_layout.addWidget(self.table)
-        layout.addWidget(anim_group)
+        # Stretch factor 1: the animations table absorbs all spare
+        # vertical space when the dialog grows.
+        layout.addWidget(anim_group, 1)
 
         # -- screens / edges ---------------------------------------------------
         screen_group = QGroupBox("Screens and edges")
@@ -268,6 +290,7 @@ class SpriteSettingsDialog(QDialog):
         m = self.model
         m.twitch_channel = self.twitch_edit.text().strip()
         m.youtube_channel = self.youtube_edit.text().strip()
+        m.youtube_check_method = self.youtube_method_combo.currentData()
         m.kick_channel = self.kick_edit.text().strip().lstrip("@")
         m.preferred_platform = self.platform_combo.currentData()
         m.live_animation = self.live_combo.currentData()
