@@ -101,13 +101,15 @@ class SpriteSettingsDialog(QDialog):
         form.addRow("YouTube channel:", self.youtube_edit)
 
         self.youtube_method_combo = QComboBox()
-        self.youtube_method_combo.addItem("DecAPI (default)", "decapi")
-        self.youtube_method_combo.addItem("Web scrape (/live page)", "scrape")
+        self.youtube_method_combo.addItem(
+            "Web scrape (/live page, default)", "scrape"
+        )
+        self.youtube_method_combo.addItem("DecAPI", "decapi")
         self.youtube_method_combo.setToolTip(
             "How the YouTube channel is checked for a livestream:\n"
-            "- DecAPI: uses the decapi.me service (may miss some streams)\n"
-            "- Web scrape: loads youtube.com/<handle>/live directly and\n"
-            "  looks for the live marker - usually more reliable"
+            "- Web scrape (default): loads youtube.com/<handle>/live\n"
+            "  directly and looks for the live marker - most reliable\n"
+            "- DecAPI: uses the decapi.me service (may miss some streams)"
         )
         method_idx = self.youtube_method_combo.findData(
             model.youtube_check_method

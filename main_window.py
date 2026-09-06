@@ -36,6 +36,8 @@ from config import (
     load_json, save_json,
 )
 from updater import Updater
+from pack_service import PackService
+from pack_browser import PackBrowserDialog
 from version import VERSION
 from sprite_model import SpriteModel, list_asset_dirs
 from sprite_window import SpriteWindow
@@ -165,6 +167,13 @@ class MainWindow(QMainWindow):
             "the new sprite appears in the list automatically"
         )
         assets_btn.clicked.connect(self._open_assets_folder)
+        browse_btn = QPushButton("Browse packs...")
+        browse_btn.setProperty("accent", True)
+        browse_btn.setToolTip(
+            "Download community sprite packs from GitHub - or update "
+            "the ones you have installed"
+        )
+        browse_btn.clicked.connect(self._browse_packs)
         info_btn = QPushButton("Info")
         info_btn.clicked.connect(self._show_info)
         support_btn = QPushButton("Support the program")
@@ -179,6 +188,7 @@ class MainWindow(QMainWindow):
         self.update_btn.setProperty("link", True)
         self.update_btn.clicked.connect(self._on_update_clicked)
         top_bar.addWidget(assets_btn)
+        top_bar.addWidget(browse_btn)
         top_bar.addWidget(info_btn)
         top_bar.addWidget(support_btn)
         top_bar.addWidget(reddit_btn)
@@ -193,6 +203,15 @@ class MainWindow(QMainWindow):
         self.updater.check_finished.connect(self._on_update_check_finished)
         self.updater.update_finished.connect(self._on_update_finished)
         QTimer.singleShot(3000, self.updater.check_async)
+
+        # Sprite pack machinery: quiet update check shortly after start;
+        # results land in the status label (no popups).
+        self.pack_service = PackService(self)
+        self.pack_service.updates_checked.connect(self._on_pack_updates)
+        self.pack_service.install_finished.connect(
+            self._on_pack_install_finished
+        )
+        QTimer.singleShot(6000, self.pack_service.check_updates_async)
 
         # -- two preview panels ------------------------------------------
         panels = QHBoxLayout()
@@ -522,6 +541,30 @@ class MainWindow(QMainWindow):
                 self.sprite_windows[asset].request_close()
                 self.show_sprite(asset, position=(pos.x(), pos.y()))
             self.refresh_lists()
+
+    # -- sprite packs ---------------------------------------------------------
+    def _browse_packs(self):
+        dialog = PackBrowserDialog(self.pack_service, self)
+        dialog.exec_()
+
+    def _on_pack_updates(self, pack_ids):
+        if pack_ids:
+            names = ", ".join(pack_ids)
+            self.status_label.setText(
+                f"Sprite pack update(s) available: {names} - "
+                "open 'Browse packs...' to update"
+            )
+
+    def _on_pack_install_finished(self, pack_id, ok, message):
+        if ok:
+            # New/updated GIFs on disk - refresh the asset panel and, if
+            # the sprite is on the desktop right now, reload it.
+            self.refresh_lists()
+            if pack_id in self.sprite_windows:
+                pos = self.sprite_windows[pack_id].pos()
+                self.sprite_windows[pack_id].request_close()
+                self.show_sprite(pack_id, position=(pos.x(), pos.y()))
+        self.status_label.setText(message)
 
     def _open_assets_folder(self):
         """Open the assets folder in Windows Explorer."""

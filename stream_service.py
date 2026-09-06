@@ -8,11 +8,12 @@ Uses the free DecAPI service (same as the old program):
   Twitch : https://decapi.me/twitch/uptime/<channel>
            -> "<channel> is offline" when offline, an uptime string when live.
   YouTube: two selectable methods (per sprite):
-           * "decapi" (default): compare latest_video with and without
+           * "scrape" (default): fetch https://www.youtube.com/<handle>/live
+             with a browser User-Agent and look for '"isLive":true' in the
+             HTML (guarding against '"isUpcoming":true' for scheduled
+             streams).  Most reliable.
+           * "decapi": compare latest_video with and without
              no_livestream=1; different answers mean the channel is live.
-           * "scrape": fetch https://www.youtube.com/<handle>/live with a
-             browser User-Agent and look for '"isLive":true' in the HTML
-             (guarding against '"isUpcoming":true' for scheduled streams).
 
 All network requests run on a background thread; results are delivered to
 the UI thread through a Qt signal.  The service also tracks per-channel
@@ -103,11 +104,11 @@ class StreamService(QObject):
         self._thread = None
 
     # -- subscriptions ------------------------------------------------------
-    def track(self, platform, channel, youtube_method="decapi"):
+    def track(self, platform, channel, youtube_method="scrape"):
         """Start tracking a channel (idempotent).
 
         `youtube_method` selects how YouTube channels are checked:
-        "decapi" (default) or "scrape" (the channel's /live page).
+        "scrape" (default, the channel's /live page) or "decapi".
         """
         key = self._key(platform, channel)
         if not key:
@@ -116,7 +117,7 @@ class StreamService(QObject):
             self._channels[key] = self._channels.get(key, 0) + 1
             if key[0] == "youtube":
                 self._yt_method[key] = (
-                    "scrape" if youtube_method == "scrape" else "decapi"
+                    "decapi" if youtube_method == "decapi" else "scrape"
                 )
         self._ensure_thread()
 
@@ -204,11 +205,11 @@ class StreamService(QObject):
                 is_live = self._check_kick(channel)
             else:
                 with self._lock:
-                    method = self._yt_method.get(key, "decapi")
-                if method == "scrape":
-                    is_live = self._check_youtube_scrape(channel)
-                else:
+                    method = self._yt_method.get(key, "scrape")
+                if method == "decapi":
                     is_live = self._check_youtube(channel)
+                else:
+                    is_live = self._check_youtube_scrape(channel)
         except requests.RequestException as e:
             logger.warning("Network error checking %s/%s: %s", platform, channel, e)
             return  # keep last known status on network problems

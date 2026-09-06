@@ -95,9 +95,9 @@ class SpriteModel:
         self.youtube_channel = ""
         self.kick_channel = ""
         self.preferred_platform = "twitch"   # "twitch", "youtube" or "kick"
-        # How the YouTube channel is checked: "decapi" (default) or
-        # "scrape" (fetch the channel's /live page directly).
-        self.youtube_check_method = "decapi"
+        # How the YouTube channel is checked: "scrape" (default, fetches
+        # the channel's /live page directly - most reliable) or "decapi".
+        self.youtube_check_method = "scrape"
         self.hide_when_offline = False
         # Hide again after the live notification was clicked (visited);
         # only takes effect when hide_when_offline is also enabled.
@@ -166,9 +166,9 @@ class SpriteModel:
         self.youtube_channel = data.get("youtube_channel") or ""
         self.kick_channel = data.get("kick_channel") or ""
         self.preferred_platform = data.get("preferred_platform", "twitch")
-        self.youtube_check_method = data.get("youtube_check_method", "decapi")
+        self.youtube_check_method = data.get("youtube_check_method", "scrape")
         if self.youtube_check_method not in ("decapi", "scrape"):
-            self.youtube_check_method = "decapi"
+            self.youtube_check_method = "scrape"
         self.hide_when_offline = bool(data.get("hide_when_offline", False))
         self.hide_when_notified = bool(
             data.get("hide_when_notified", False)

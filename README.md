@@ -89,9 +89,9 @@ anywhere and run the exe.
   checked about every 60 seconds (with a random +/- 15 s jitter) in the
   background (Twitch via decapi.me, Kick via its public channel API - no
   API keys needed anywhere). For YouTube there are two selectable check
-  methods in the settings: **DecAPI** (default) or **Web scrape**, which
-  loads `youtube.com/<handle>/live` directly and looks for the live
-  marker - usually more reliable. When the streamer goes
+  methods in the settings: **Web scrape** (default), which loads
+  `youtube.com/<handle>/live` directly and looks for the live marker -
+  the most reliable way - or **DecAPI**. When the streamer goes
   live the sprite switches to the live animation and stays in it until
   you double-click the sprite, which opens the stream page in your
   browser (a single click does nothing, so you can't open it by
@@ -102,6 +102,23 @@ anywhere and run the exe.
   you've clicked it, until the next stream.
   When the stream ends everything resets so you get notified again next
   time. Right-click a sprite to see the live status or close it.
+
+## Sprite packs (community content)
+
+The **Browse packs...** button opens the community sprite-pack browser.
+Packs live in the public repo
+[prep-stack/livesprite_gifs](https://github.com/prep-stack/livesprite_gifs)
+(one folder per pack with a `pack.json` manifest); the browser shows an
+animated preview, name, creator and version for each pack and installs
+them into `assets/` with one click. Anyone can contribute a pack via
+Pull Request - see that repo's README.
+
+Installed packs carry a hidden `.pack.json` marker with their version.
+Shortly after startup the program quietly checks for pack updates (one
+GitHub API call) and mentions available updates in the status bar;
+updating a pack overwrites its GIFs but **never** your settings
+(channels, chances, directions). Folders you created by hand have no
+marker and are never touched.
 
 ## Adding a new sprite
 
@@ -123,5 +140,7 @@ A PNG in the folder is used as the icon in the manager list.
 | `tray.py` | system tray icon with quick actions |
 | `settings_dialog.py` | per-sprite settings UI |
 | `theme.py` | modern dark theme (colors + Qt stylesheet, pure cosmetics) |
+| `pack_service.py` | community sprite packs: fetch/cache/install/update |
+| `pack_browser.py` | the "Browse packs..." dialog |
 | `soda.png` / `soda.ico` | application icon (window, tray and exe) |
 | `_migrate_old_settings.py` | one-off import of old AppData settings (safe to delete) |
