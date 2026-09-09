@@ -22,7 +22,7 @@ import logging
 import random
 import webbrowser
 
-from PyQt5.QtCore import QPoint, QRect, Qt, QTimer
+from PyQt5.QtCore import QBuffer, QByteArray, QPoint, QRect, Qt, QTimer
 from PyQt5.QtGui import QGuiApplication, QMovie
 from PyQt5.QtWidgets import QLabel, QMenu, QWidget
 
@@ -149,9 +149,25 @@ class SpriteWindow(QWidget):
         self._dx, self._dy = anim.delta()
         self._saw_frame = False
 
-        self.movie = QMovie(self.model.animation_path(name))
+        # Load the GIF through a memory buffer instead of QMovie(path):
+        # QMovie keeps a file handle open for as long as it plays, which
+        # locks the GIF on Windows and makes pack updates fail while the
+        # sprite is active.  With the bytes in memory the file on disk
+        # stays free to overwrite/delete at any time.
+        path = self.model.animation_path(name)
+        try:
+            with open(path, "rb") as f:
+                self._gif_data = QByteArray(f.read())
+        except OSError as e:
+            logger.error("Cannot read GIF %s: %s", path, e)
+            return
+        self._gif_buffer = QBuffer(self._gif_data)
+        self._gif_buffer.open(QBuffer.ReadOnly)
+        self.movie = QMovie()
+        self.movie.setDevice(self._gif_buffer)
+        self.movie.setFormat(b"gif")
         if not self.movie.isValid():
-            logger.error("Invalid GIF: %s", self.model.animation_path(name))
+            logger.error("Invalid GIF: %s", path)
             return
         # Playback speed as a percentage (100 = the GIF's own timing)
         self.movie.setSpeed(max(10, min(500, anim.speed)))

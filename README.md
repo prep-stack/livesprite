@@ -115,10 +115,17 @@ Pull Request - see that repo's README.
 
 Installed packs carry a hidden `.pack.json` marker with their version.
 Shortly after startup the program quietly checks for pack updates (one
-GitHub API call) and mentions available updates in the status bar;
-updating a pack overwrites its GIFs but **never** your settings
+GitHub API call); updatable sprites get a purple **"⬆ update
+available"** badge right in the Assets panel and a status-bar hint.
+Updating a pack overwrites its GIFs but **never** your settings
 (channels, chances, directions). Folders you created by hand have no
-marker and are never touched.
+marker and are never touched. Sprites that are on the desktop are
+briefly deactivated during their update and respawn at the same spot.
+
+Sprites don't hold their GIF files open (they play from memory), so
+packs can be updated - and asset folders deleted - while sprites are
+active. **Delete files...** (button or right-click on an asset) removes
+a sprite folder from disk after a confirmation.
 
 ## Adding a new sprite
 

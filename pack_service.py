@@ -28,7 +28,9 @@ import json
 import logging
 import os
 import shutil
+import stat
 import threading
+import time
 from urllib.parse import quote
 
 import requests
@@ -48,6 +50,70 @@ CACHE_DIR = os.path.join(CONFIG_DIR, "pack_cache")
 CACHE_INDEX = os.path.join(CACHE_DIR, "index.json")  # repo path -> sha
 
 MARKER_FILE = ".pack.json"   # written into installed asset folders
+
+TMP_SUFFIX = ".part"         # temp download folder next to the asset folder
+
+
+def _force_rmtree(path, attempts=4):
+    """Delete a folder tree, retrying and clearing read-only bits.
+
+    Windows can hold files briefly (antivirus, indexer, a preview that
+    just closed).  shutil.rmtree(ignore_errors=True) hides such failures
+    and leaves the folder behind, so retry loudly instead.  Returns True
+    when the folder is gone.
+    """
+    def _clear_readonly(func, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except OSError:
+            pass
+
+    for attempt in range(attempts):
+        if not os.path.exists(path):
+            return True
+        try:
+            shutil.rmtree(path, onerror=_clear_readonly)
+        except OSError:
+            pass
+        if not os.path.exists(path):
+            return True
+        time.sleep(0.3 * (attempt + 1))
+    return not os.path.exists(path)
+
+
+def _replace_with_retry(src, dst, attempts=5):
+    """os.replace with retries for transiently locked destination files."""
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except OSError as e:
+            last_error = e
+            time.sleep(0.3 * (attempt + 1))
+    raise OSError(
+        f"Could not overwrite {os.path.basename(dst)} - the file seems "
+        f"to be in use ({last_error})"
+    )
+
+
+def cleanup_orphan_part_folders():
+    """Remove leftover *.part folders from crashed/killed downloads."""
+    try:
+        names = os.listdir(ASSETS_DIR)
+    except OSError:
+        return
+    for name in names:
+        if not name.endswith(TMP_SUFFIX):
+            continue
+        path = os.path.join(ASSETS_DIR, name)
+        if os.path.isdir(path):
+            if _force_rmtree(path):
+                logger.info("Removed orphan temp folder: %s", name)
+            else:
+                logger.warning("Could not remove orphan temp folder: %s",
+                               name)
 
 
 def parse_version(text):
@@ -74,6 +140,9 @@ class PackService(QObject):
 
     # (ok, packs, error_message) - packs is a list of dicts
     packs_loaded = pyqtSignal(bool, list, str)
+    # (pack_id) - emitted right before a download begins, so the UI can
+    # deactivate the sprite (releases anything holding its files)
+    install_started = pyqtSignal(str)
     # (pack_id, ok, message)
     install_finished = pyqtSignal(str, bool, str)
     # (updatable_pack_ids) - emitted after a quiet update check
@@ -89,6 +158,7 @@ class PackService(QObject):
         threading.Thread(target=self._load_packs_safe, daemon=True).start()
 
     def install_async(self, pack):
+        self.install_started.emit(pack["id"])
         threading.Thread(
             target=self._install_safe, args=(pack,), daemon=True
         ).start()
@@ -208,25 +278,32 @@ class PackService(QObject):
         half-failed download never leaves a broken pack behind.
         """
         dest = os.path.join(ASSETS_DIR, pack["id"])
-        tmp = dest + ".part"
-        if os.path.isdir(tmp):
-            shutil.rmtree(tmp, ignore_errors=True)
-        os.makedirs(tmp)
+        tmp = dest + TMP_SUFFIX
+        # A leftover temp folder (crash, killed process, previous locked
+        # file) must never block an install - delete it with retries.
+        if os.path.exists(tmp) and not _force_rmtree(tmp):
+            raise OSError(
+                f"Could not clear the temp folder {os.path.basename(tmp)} - "
+                "please close programs using it and try again"
+            )
+        os.makedirs(tmp, exist_ok=True)
         try:
             for repo_path, _sha in pack["files"]:
                 filename = repo_path.split("/")[-1]
                 data = self._download_raw(repo_path)
                 with open(os.path.join(tmp, filename), "wb") as f:
                     f.write(data)
-            # All downloads succeeded - move into place
+            # All downloads succeeded - move into place.  os.replace
+            # overwrites atomically; retry per file because a GIF might
+            # be momentarily held by something (indexer, old preview).
             os.makedirs(dest, exist_ok=True)
             for name in os.listdir(tmp):
-                target = os.path.join(dest, name)
-                if os.path.exists(target):
-                    os.remove(target)
-                shutil.move(os.path.join(tmp, name), target)
+                _replace_with_retry(os.path.join(tmp, name),
+                                    os.path.join(dest, name))
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            if not _force_rmtree(tmp):
+                logger.warning("Temp folder left behind: %s (will be "
+                               "cleaned on next start)", tmp)
         save_json(os.path.join(dest, MARKER_FILE), {
             "pack_id": pack["id"],
             "version": pack["version"],

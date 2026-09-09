@@ -36,7 +36,10 @@ from config import (
     load_json, save_json,
 )
 from updater import Updater
-from pack_service import PackService
+from pack_service import (
+    PackService, cleanup_orphan_part_folders,
+    _force_rmtree as pack_force_rmtree,
+)
 from pack_browser import PackBrowserDialog
 from version import VERSION
 from sprite_model import SpriteModel, list_asset_dirs
@@ -51,7 +54,7 @@ PREVIEW_SIZE = 48  # pixel height of animated previews in the lists
 class PreviewItemWidget(QWidget):
     """List row with an animated GIF preview and the sprite name."""
 
-    def __init__(self, asset_dir, subtitle="", parent=None):
+    def __init__(self, asset_dir, subtitle="", badge="", parent=None):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 2, 4, 2)
@@ -95,8 +98,13 @@ class PreviewItemWidget(QWidget):
             f"<span style='color:{theme.LIVE_RED};font-weight:bold'>"
             "LIVE</span>",
         )
+        self.badge = badge  # e.g. "update available" (used by tests too)
+        badge_html = (
+            f" <span style='color:{theme.ACCENT};font-weight:bold'>"
+            f"&#x2B06; {badge}</span>" if badge else ""
+        )
         text = QLabel(
-            f"<b>{asset_dir}</b>"
+            f"<b>{asset_dir}</b>{badge_html}"
             + (
                 f"<br><small style='color:{theme.MUTED}'>"
                 f"{subtitle_html}</small>"
@@ -206,11 +214,19 @@ class MainWindow(QMainWindow):
 
         # Sprite pack machinery: quiet update check shortly after start;
         # results land in the status label (no popups).
+        cleanup_orphan_part_folders()  # leftover *.part from crashes
         self.pack_service = PackService(self)
         self.pack_service.updates_checked.connect(self._on_pack_updates)
+        self.pack_service.install_started.connect(self._on_pack_install_started)
         self.pack_service.install_finished.connect(
             self._on_pack_install_finished
         )
+        # Pack ids with a newer version in the repo (drives the little
+        # "update available" badge in the Assets panel).
+        self._pack_updates = set()
+        # Sprites deactivated for the duration of a pack install; they
+        # respawn at the same position when the install finishes.
+        self._packs_reactivate = {}
         QTimer.singleShot(6000, self.pack_service.check_updates_async)
 
         # -- two preview panels ------------------------------------------
@@ -232,6 +248,10 @@ class MainWindow(QMainWindow):
         left_box.addLayout(left_header)
         self.asset_list = QListWidget(self)
         self.asset_list.itemDoubleClicked.connect(self._add_item)
+        self.asset_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.asset_list.customContextMenuRequested.connect(
+            self._asset_context_menu
+        )
         left_box.addWidget(self.asset_list)
         panels.addLayout(left_box)
 
@@ -270,10 +290,17 @@ class MainWindow(QMainWindow):
         settings_btn.clicked.connect(self._edit_selected)
         refresh_btn = QPushButton("Refresh")
         refresh_btn.clicked.connect(self.refresh_lists)
+        delete_btn = QPushButton("Delete files...")
+        delete_btn.setToolTip(
+            "Permanently delete the selected sprite's folder (all its "
+            "GIFs) from the assets directory"
+        )
+        delete_btn.clicked.connect(self._delete_selected)
         buttons.addWidget(add_btn)
         buttons.addWidget(remove_btn)
         buttons.addWidget(settings_btn)
         buttons.addWidget(refresh_btn)
+        buttons.addWidget(delete_btn)
         layout.addLayout(buttons)
 
         # -- global actions -----------------------------------------------
@@ -356,9 +383,13 @@ class MainWindow(QMainWindow):
             elif not active and asset_dir in self.sprite_windows:
                 subtitle = "on desktop"
 
+            badge = ""
+            if asset_dir in getattr(self, "_pack_updates", ()):
+                badge = "update available"
+
             item = QListWidgetItem()
             item.setData(Qt.UserRole, asset_dir)
-            widget = PreviewItemWidget(asset_dir, subtitle)
+            widget = PreviewItemWidget(asset_dir, subtitle, badge)
             item.setSizeHint(widget.sizeHint())
             list_widget.addItem(item)
             list_widget.setItemWidget(item, widget)
@@ -396,6 +427,68 @@ class MainWindow(QMainWindow):
         if asset and asset in self.sprite_windows:
             self.sprite_windows[asset].request_close()
             self.refresh_lists()
+
+    def _asset_context_menu(self, pos):
+        """Right-click menu on the Assets panel: add / settings / delete."""
+        item = self.asset_list.itemAt(pos)
+        if item is None:
+            return
+        asset = item.data(Qt.UserRole)
+        menu = QMenu(self)
+        add_action = menu.addAction("Add to desktop")
+        add_action.setEnabled(asset not in self.sprite_windows)
+        settings_action = menu.addAction("Settings...")
+        menu.addSeparator()
+        delete_action = menu.addAction("Delete files from disk...")
+        chosen = menu.exec_(self.asset_list.mapToGlobal(pos))
+        if chosen == add_action:
+            self.show_sprite(asset)
+            self.refresh_lists()
+        elif chosen == settings_action:
+            self.asset_list.setCurrentItem(item)
+            self._edit_selected()
+        elif chosen == delete_action:
+            self.delete_asset(asset)
+
+    def _delete_selected(self):
+        asset = self._selected_asset()
+        if asset:
+            self.delete_asset(asset)
+        else:
+            self.status_label.setText("Select a sprite to delete first")
+
+    def delete_asset(self, asset_dir):
+        """Permanently delete an asset folder from disk (with confirm)."""
+        answer = QMessageBox.warning(
+            self, "Delete sprite files",
+            f"Permanently delete the folder '{asset_dir}' and all its "
+            "GIFs from the assets directory?\n\n"
+            "This cannot be undone. (Packs from 'Browse packs...' can "
+            "always be downloaded again.)",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        # Deactivate first so nothing of ours is using the folder
+        if asset_dir in self.sprite_windows:
+            self.sprite_windows[asset_dir].request_close()
+        # Stop the list previews (they hold no file locks, but clearing
+        # the lists drops any lingering references before the delete).
+        self.refresh_lists()
+        folder = os.path.join(ASSETS_DIR, asset_dir)
+        if pack_force_rmtree(folder):
+            self.session["positions"].pop(asset_dir, None)
+            self.session["sprites"].pop(asset_dir, None)
+            self._save_session()
+            self._pack_updates.discard(asset_dir)
+            self.status_label.setText(f"Deleted '{asset_dir}'")
+            logger.info("Deleted asset folder: %s", asset_dir)
+        else:
+            self.status_label.setText(
+                f"Could not delete '{asset_dir}' - some files are in use"
+            )
+            logger.error("Could not delete asset folder: %s", asset_dir)
+        self.refresh_lists()
 
     # -- global actions -------------------------------------------------------
     def show_all_sprites(self):
@@ -546,24 +639,43 @@ class MainWindow(QMainWindow):
     def _browse_packs(self):
         dialog = PackBrowserDialog(self.pack_service, self)
         dialog.exec_()
+        # Re-check after browsing so the "update available" badges match
+        # whatever was installed/updated in the dialog.
+        self.pack_service.check_updates_async()
 
     def _on_pack_updates(self, pack_ids):
+        self._pack_updates = set(pack_ids)
         if pack_ids:
             names = ", ".join(pack_ids)
             self.status_label.setText(
                 f"Sprite pack update(s) available: {names} - "
                 "open 'Browse packs...' to update"
             )
+        # Refresh so the "update available" badges (dis)appear
+        self.refresh_lists()
+
+    def _on_pack_install_started(self, pack_id):
+        """Deactivate the sprite while its files are being replaced.
+
+        Sprites load GIFs into memory so they don't lock files, but
+        closing the window is a cheap extra guarantee that nothing of
+        ours holds the folder during the update.
+        """
+        if pack_id in self.sprite_windows:
+            window = self.sprite_windows[pack_id]
+            self._packs_reactivate[pack_id] = (window.x(), window.y())
+            window.request_close()
+            logger.info("Deactivated %s during pack install", pack_id)
 
     def _on_pack_install_finished(self, pack_id, ok, message):
         if ok:
-            # New/updated GIFs on disk - refresh the asset panel and, if
-            # the sprite is on the desktop right now, reload it.
-            self.refresh_lists()
-            if pack_id in self.sprite_windows:
-                pos = self.sprite_windows[pack_id].pos()
-                self.sprite_windows[pack_id].request_close()
-                self.show_sprite(pack_id, position=(pos.x(), pos.y()))
+            self._pack_updates.discard(pack_id)
+        # Respawn a sprite we deactivated for the install - also on
+        # failure, so the user never loses their active sprite.
+        pos = self._packs_reactivate.pop(pack_id, None)
+        if pos is not None:
+            self.show_sprite(pack_id, position=pos)
+        self.refresh_lists()
         self.status_label.setText(message)
 
     def _open_assets_folder(self):
