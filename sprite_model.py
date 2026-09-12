@@ -103,6 +103,9 @@ class SpriteModel:
         # only takes effect when hide_when_offline is also enabled.
         self.hide_when_notified = False
         self.edge_behavior = "wrap"          # wrap / bounce / stop
+        # Keep the sprite above other windows (re-asserted periodically);
+        # toggleable from the sprite's right-click menu.
+        self.always_on_top = True
         self.allow_multi_screen = True
         self.restricted_screens = []         # screen indices the sprite avoids
 
@@ -176,6 +179,7 @@ class SpriteModel:
         self.edge_behavior = data.get("edge_behavior", "wrap")
         if self.edge_behavior not in EDGE_BEHAVIORS:
             self.edge_behavior = "wrap"
+        self.always_on_top = bool(data.get("always_on_top", True))
         self.allow_multi_screen = bool(data.get("allow_multi_screen", True))
         self.restricted_screens = [
             int(i) for i in data.get("restricted_screens", [])
@@ -195,6 +199,7 @@ class SpriteModel:
             "hide_when_offline": self.hide_when_offline,
             "hide_when_notified": self.hide_when_notified,
             "edge_behavior": self.edge_behavior,
+            "always_on_top": self.always_on_top,
             "allow_multi_screen": self.allow_multi_screen,
             "restricted_screens": self.restricted_screens,
         }

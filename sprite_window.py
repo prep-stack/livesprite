@@ -20,6 +20,7 @@ time and walks around the desktop:
 
 import logging
 import random
+import sys
 import webbrowser
 
 from PyQt5.QtCore import QBuffer, QByteArray, QPoint, QRect, Qt, QTimer
@@ -31,6 +32,35 @@ from config import ANIMATION_SWITCH_CHANCE, MOVEMENT_INTERVAL_MS
 logger = logging.getLogger(__name__)
 
 CLICK_DRAG_THRESHOLD = 6  # pixels of movement that still counts as a click
+TOPMOST_INTERVAL_MS = 5000  # how often the on-top flag is re-asserted
+
+# Win32 z-order plumbing.  IMPORTANT: SetWindowPos must be declared with
+# proper argument types - with plain ints, the special handles -1/-2
+# (HWND_TOPMOST/HWND_NOTOPMOST) get truncated on 64-bit Python and the
+# call fails silently (returns 0).  This exact bug made the old 30s
+# re-assert a no-op.
+_HWND_TOPMOST = -1
+_HWND_NOTOPMOST = -2
+_SWP_FLAGS = 0x0002 | 0x0001 | 0x0010  # NOMOVE | NOSIZE | NOACTIVATE
+_set_window_pos = None
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+    _set_window_pos = ctypes.WinDLL(
+        "user32", use_last_error=True
+    ).SetWindowPos
+    _set_window_pos.argtypes = [
+        wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+        ctypes.c_int, ctypes.c_int, wintypes.UINT,
+    ]
+    _set_window_pos.restype = wintypes.BOOL
+
+
+def _set_zorder(hwnd, insert_after):
+    """SetWindowPos wrapper; returns True on success."""
+    if _set_window_pos is None:
+        return False
+    return bool(_set_window_pos(hwnd, insert_after, 0, 0, 0, 0, _SWP_FLAGS))
 
 
 class SpriteWindow(QWidget):
@@ -81,31 +111,55 @@ class SpriteWindow(QWidget):
         self.movement_timer.timeout.connect(self._step)
         self.movement_timer.start(MOVEMENT_INTERVAL_MS)
 
-        # Keep the sprite above other windows: Windows occasionally demotes
-        # topmost windows (fullscreen apps, Explorer restarts...), so we
-        # re-assert the topmost flag every 30 seconds without stealing focus.
+        # Keep the sprite above other windows.  Windows demotes topmost
+        # windows (fullscreen video, Discord overlay, Explorer restarts)
+        # and other topmost windows can insert above us *within* the
+        # topmost layer - re-assert frequently; two Win32 calls every few
+        # seconds cost nothing and recovery is near-instant.
         self.topmost_timer = QTimer(self)
         self.topmost_timer.timeout.connect(self.assert_topmost)
-        self.topmost_timer.start(30000)
+        if self.model.always_on_top:
+            self.topmost_timer.start(TOPMOST_INTERVAL_MS)
 
         self.select_random_animation()
 
     def assert_topmost(self):
-        """Re-assert the always-on-top flag without activating the window."""
-        if not self.isVisible():
+        """Force the sprite back to the TOP of the topmost layer.
+
+        Re-applying HWND_TOPMOST alone is a no-op when the window is
+        already topmost - but other topmost windows (Discord overlay,
+        fullscreen browser video) can still sit ABOVE us within the
+        topmost layer.  Dropping to NOTOPMOST and immediately going back
+        to TOPMOST forces Windows to re-insert the sprite at the top of
+        that layer.  SWP_NOACTIVATE keeps focus untouched; only z-order
+        changes, so there is no flicker.
+        """
+        if not self.isVisible() or not self.model.always_on_top:
             return
         try:
-            import ctypes
-            HWND_TOPMOST = -1
-            SWP_NOMOVE = 0x0002
-            SWP_NOSIZE = 0x0001
-            SWP_NOACTIVATE = 0x0010
-            ctypes.windll.user32.SetWindowPos(
-                int(self.winId()), HWND_TOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            )
+            hwnd = int(self.winId())
+            ok1 = _set_zorder(hwnd, _HWND_NOTOPMOST)
+            ok2 = _set_zorder(hwnd, _HWND_TOPMOST)
+            if not (ok1 and ok2):
+                logger.debug("assert_topmost SetWindowPos returned false")
         except Exception as e:  # non-Windows or unexpected failure
             logger.debug("assert_topmost failed: %s", e)
+
+    def set_always_on_top(self, enabled):
+        """Toggle keep-on-top at runtime and persist the choice."""
+        self.model.always_on_top = enabled
+        self.model.save()
+        if enabled:
+            self.assert_topmost()
+            self.topmost_timer.start(TOPMOST_INTERVAL_MS)
+        else:
+            self.topmost_timer.stop()
+            try:
+                _set_zorder(int(self.winId()), _HWND_NOTOPMOST)
+            except Exception as e:
+                logger.debug("clearing topmost failed: %s", e)
+        logger.info("%s: keep on top %s", self.model.asset_dir,
+                    "enabled" if enabled else "disabled")
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -213,6 +267,8 @@ class SpriteWindow(QWidget):
             self.set_animation(self.model.live_animation)
             self.streams.mark_notified(platform, channel)
             logger.info("%s: %s went LIVE", self.model.asset_dir, channel)
+            # A live notification must be seen - jump back on top now
+            self.assert_topmost()
         elif (not is_live
               and self.current_animation == self.model.live_animation):
             self.select_random_animation()
@@ -425,6 +481,9 @@ class SpriteWindow(QWidget):
                 self.ensure_on_allowed_screen()
                 if self.on_moved:
                     self.on_moved(self.model.asset_dir, self.x(), self.y())
+                # The user is interacting with the sprite - make sure it
+                # is right at the top again
+                self.assert_topmost()
             # A single click does nothing; double-click opens the stream
             event.accept()
 
@@ -462,10 +521,15 @@ class SpriteWindow(QWidget):
             status.setEnabled(False)
             menu.addSeparator()
         open_action = menu.addAction("Open stream page")
+        top_action = menu.addAction("Keep on top")
+        top_action.setCheckable(True)
+        top_action.setChecked(self.model.always_on_top)
         close_action = menu.addAction("Close sprite")
         chosen = menu.exec_(event.globalPos())
         if chosen == open_action:
             self._handle_click()
+        elif chosen == top_action:
+            self.set_always_on_top(top_action.isChecked())
         elif chosen == close_action:
             self.request_close()
 

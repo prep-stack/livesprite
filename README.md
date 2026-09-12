@@ -61,7 +61,12 @@ anywhere and run the exe.
   sprite's configuration. Global buttons (Show all / Hide all /
   Restrict all...) mirror the tray menu. The active sprites and their
   positions are remembered in `config/session.json`.
-- **Sprites**: transparent, always-on-top windows. Each GIF in the asset
+- **Sprites**: transparent, always-on-top windows. The on-top flag is
+  re-asserted every 5 seconds (and after drags and live notifications)
+  with a NOTOPMOST->TOPMOST flip, so sprites recover quickly even when
+  other always-on-top windows (Discord, fullscreen browser video) push
+  above them. Right-click a sprite to toggle "Keep on top" off for that
+  sprite (saved per sprite). Each GIF in the asset
   folder is an animation with a chance (%), a walk direction, a movement
   speed (pixels per step) and a playback speed (% - 100 is normal, 200 is
   twice as fast). At the end of each GIF loop there is a 20% chance to
