@@ -1,4 +1,4 @@
-# LiveSprite (clean rewrite)
+# LiveSprite
 
 Animated GIF sprites that walk around your desktop, with Twitch **and**
 YouTube live-stream notifications. This is a from-scratch rewrite of the
