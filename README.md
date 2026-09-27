@@ -78,6 +78,15 @@ anywhere and run the exe.
   it jumps to the next allowed screen in its direction of travel.
   Edge behavior can be `wrap` (default, pass through one edge and appear
   on the other side), `bounce` or `stop`.
+- **Restricted areas**: `Restrict area...` opens a Snipping-Tool-style
+  picker (the screen dims, drag a rectangle, Esc cancels) that marks a
+  desktop region - a webcam corner, stream chat, anything - as a global
+  no-go zone for every sprite. Walking sprites jump across the zone in
+  their direction of travel (or bounce off when there is no room), and
+  a sprite dropped inside a zone is nudged out. `Show restricted areas`
+  marks every zone in red on the desktop with an X button to delete it;
+  the tray menu has "Clear restricted areas". Zones are stored in
+  `config/regions.json` and survive program updates.
 - **Start with Windows**: on by default. Uses the per-user registry Run
   key, no admin rights needed. The checkbox in the manager window only
   appears when autostart is actually off (checked against the registry) -
@@ -154,5 +163,7 @@ A PNG in the folder is used as the icon in the manager list.
 | `theme.py` | modern dark theme (colors + Qt stylesheet, pure cosmetics) |
 | `pack_service.py` | community sprite packs: fetch/cache/install/update |
 | `pack_browser.py` | the "Browse packs..." dialog |
+| `regions.py` | global restricted areas storage (config/regions.json) |
+| `region_picker.py` | snipping-tool area picker + red display overlays |
 | `soda.png` / `soda.ico` | application icon (window, tray and exe) |
 | `_migrate_old_settings.py` | one-off import of old AppData settings (safe to delete) |

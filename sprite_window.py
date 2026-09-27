@@ -27,6 +27,7 @@ from PyQt5.QtCore import QBuffer, QByteArray, QPoint, QRect, Qt, QTimer
 from PyQt5.QtGui import QGuiApplication, QMovie
 from PyQt5.QtWidgets import QLabel, QMenu, QWidget
 
+import regions
 from config import ANIMATION_SWITCH_CHANCE, MOVEMENT_INTERVAL_MS
 
 logger = logging.getLogger(__name__)
@@ -307,13 +308,24 @@ class SpriteWindow(QWidget):
 
         new_x, new_y = self._apply_edge_behavior(new_x, new_y)
 
-        # Skip over restricted screens in the direction of travel
+        # Skip over restricted areas/screens in the direction of travel
         if self._is_restricted_at(new_x, new_y):
-            dest = self._skip_destination(new_x, new_y)
-            if dest is not None:
+            zone = self._blocking_region(new_x, new_y)
+            if zone is not None:
+                dest = self._jump_across_region(zone, new_x, new_y)
+                if dest is None:
+                    # Can't jump across (edge of screen, another zone):
+                    # bounce back so the sprite never gets stuck.
+                    self._dx = -self._dx
+                    self._dy = -self._dy
+                    return
                 new_x, new_y = dest
             else:
-                return  # nowhere to go this step
+                dest = self._skip_destination(new_x, new_y)
+                if dest is not None:
+                    new_x, new_y = dest
+                else:
+                    return  # nowhere to go this step
 
         self.move(new_x, new_y)
 
@@ -367,11 +379,10 @@ class SpriteWindow(QWidget):
             self._dx = self._dy = 0
         return new_x, new_y
 
-    # -- restricted screens -------------------------------------------------
+    # -- restricted screens and areas ------------------------------------------
     def _is_restricted_at(self, x, y):
-        """True when >30% of the sprite would sit on a restricted screen."""
-        if not self.model.restricted_screens:
-            return False
+        """True when >30% of the sprite would sit on a restricted screen
+        or inside a restricted area (global no-go zone)."""
         rect = QRect(x, y, self.width(), self.height())
         area = rect.width() * rect.height()
         if area <= 0:
@@ -382,7 +393,55 @@ class SpriteWindow(QWidget):
                 if inter.isValid():
                     if inter.width() * inter.height() > area * 0.3:
                         return True
+        for zone in regions.rects():
+            inter = rect.intersected(zone)
+            if inter.isValid():
+                if inter.width() * inter.height() > area * 0.3:
+                    return True
         return False
+
+    def _blocking_region(self, x, y):
+        """The restricted-area QRect the sprite would overlap, or None."""
+        rect = QRect(x, y, self.width(), self.height())
+        area = rect.width() * rect.height()
+        if area <= 0:
+            return None
+        for zone in regions.rects():
+            inter = rect.intersected(zone)
+            if inter.isValid():
+                if inter.width() * inter.height() > area * 0.3:
+                    return zone
+        return None
+
+    def _jump_across_region(self, zone, new_x, new_y):
+        """Jump across a restricted area in the direction of travel.
+
+        Walking right into a region -> reappear just past its right edge
+        (same y), and so on for the other directions.  Returns None when
+        the landing spot is itself restricted or off the allowed area -
+        the caller then bounces instead so sprites can never get stuck.
+        """
+        margin = 2
+        if abs(self._dx) >= abs(self._dy) and self._dx != 0:
+            if self._dx > 0:
+                dest = (zone.right() + margin, new_y)
+            else:
+                dest = (zone.left() - self.width() - margin, new_y)
+        elif self._dy != 0:
+            if self._dy > 0:
+                dest = (new_x, zone.bottom() + margin)
+            else:
+                dest = (new_x, zone.top() - self.height() - margin)
+        else:
+            return None
+        dx, dy = dest
+        allowed = self._allowed_geometry()
+        landing = QRect(dx, dy, self.width(), self.height())
+        if not allowed.contains(landing):
+            return None
+        if self._is_restricted_at(dx, dy):
+            return None
+        return dest
 
     def _skip_destination(self, new_x, new_y):
         """Jump over a restricted screen to the next allowed screen.
@@ -442,6 +501,33 @@ class SpriteWindow(QWidget):
         """
         if not self._is_restricted_at(self.x(), self.y()):
             return
+        # Dropped inside a restricted area?  Nudge to its nearest edge.
+        zone = self._blocking_region(self.x(), self.y())
+        if zone is not None:
+            margin = 4
+            candidates = [
+                (zone.right() + margin, self.y()),
+                (zone.left() - self.width() - margin, self.y()),
+                (self.x(), zone.bottom() + margin),
+                (self.x(), zone.top() - self.height() - margin),
+            ]
+            allowed_geo = self._allowed_geometry()
+            cx, cy = self.x(), self.y()
+            best = None
+            best_dist = None
+            for nx, ny in candidates:
+                landing = QRect(nx, ny, self.width(), self.height())
+                if not allowed_geo.contains(landing):
+                    continue
+                if self._is_restricted_at(nx, ny):
+                    continue
+                dist = abs(nx - cx) + abs(ny - cy)
+                if best_dist is None or dist < best_dist:
+                    best, best_dist = (nx, ny), dist
+            if best is not None:
+                self.move(*best)
+                return
+            # fall through to the screen logic below as a last resort
         screens = QGuiApplication.screens()
         allowed = [
             s.geometry() for i, s in enumerate(screens)

@@ -57,6 +57,10 @@ class TrayIcon(QSystemTrayIcon):
         self.restrict_menu.aboutToShow.connect(self._rebuild_restrict_menu)
         self.menu.addMenu(self.restrict_menu)
 
+        clear_areas = QAction("Clear restricted areas", self.menu)
+        clear_areas.triggered.connect(main_window.clear_restricted_areas)
+        self.menu.addAction(clear_areas)
+
         self.menu.addSeparator()
 
         # Start-with-Windows toggle.  The manager window only shows its

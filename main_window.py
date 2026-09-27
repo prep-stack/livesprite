@@ -40,6 +40,8 @@ from pack_service import (
     PackService, cleanup_orphan_part_folders,
     _force_rmtree as pack_force_rmtree,
 )
+import regions
+from region_picker import RegionPickerOverlay, RegionDisplayOverlay
 from pack_browser import PackBrowserDialog
 from version import VERSION
 from sprite_model import SpriteModel, list_asset_dirs
@@ -312,9 +314,25 @@ class MainWindow(QMainWindow):
         restrict_btn = QPushButton("Restrict all...")
         restrict_btn.clicked.connect(self._show_restrict_menu)
         self._restrict_btn = restrict_btn
+        area_btn = QPushButton("Restrict area...")
+        area_btn.setToolTip(
+            "Draw a rectangle on the screen (like the Snipping Tool) "
+            "that sprites must stay out of - e.g. your webcam or chat"
+        )
+        area_btn.clicked.connect(self._pick_restricted_area)
+        self.show_areas_btn = QPushButton("Show restricted areas")
+        self.show_areas_btn.setCheckable(True)
+        self.show_areas_btn.setToolTip(
+            "Mark every restricted area on the desktop in red; each "
+            "overlay has an X to delete that area"
+        )
+        self.show_areas_btn.toggled.connect(self._toggle_show_areas)
+        self._area_overlays = []
         global_buttons.addWidget(show_all_btn)
         global_buttons.addWidget(hide_all_btn)
         global_buttons.addWidget(restrict_btn)
+        global_buttons.addWidget(area_btn)
+        global_buttons.addWidget(self.show_areas_btn)
         layout.addLayout(global_buttons)
 
         # -- app options ----------------------------------------------------
@@ -538,6 +556,86 @@ class MainWindow(QMainWindow):
             window.model.restricted_screens = []
             window.model.save()
         logger.info("Cleared screen restrictions for all active sprites")
+
+    # -- restricted areas -------------------------------------------------------
+    def _pick_restricted_area(self):
+        """Snipping-tool-style picker for a new restricted area."""
+        # Hide the manager (and the overlays) so they don't block the view
+        self._close_area_overlays()
+        was_visible = self.isVisible()
+        if was_visible:
+            self.hide()
+
+        def picked(rect):
+            if regions.add(rect):
+                self.status_label.setText(
+                    f"Restricted area added ({rect.width()}x{rect.height()}"
+                    f" at {rect.x()},{rect.y()}) - "
+                    f"{regions.count()} area(s) total"
+                )
+                # Push any sprite standing in the new zone out of it
+                for window in self.sprite_windows.values():
+                    window.ensure_on_allowed_screen()
+            else:
+                self.status_label.setText(
+                    "Selection too small - restricted area not added"
+                )
+            finish()
+
+        def cancelled():
+            self.status_label.setText("Restricted area selection cancelled")
+            finish()
+
+        def finish():
+            self._picker = None
+            if was_visible:
+                self.showNormal()
+                self.raise_()
+            if self.show_areas_btn.isChecked():
+                self._open_area_overlays()
+
+        self._picker = RegionPickerOverlay(picked, cancelled)
+        self._picker.open()
+
+    def _toggle_show_areas(self, checked):
+        if checked:
+            self._open_area_overlays()
+            if not regions.count():
+                self.status_label.setText(
+                    "No restricted areas yet - use 'Restrict area...' "
+                    "to draw one"
+                )
+        else:
+            self._close_area_overlays()
+
+    def _open_area_overlays(self):
+        self._close_area_overlays()
+        for i, rect in enumerate(regions.rects()):
+            overlay = RegionDisplayOverlay(i, rect, self._delete_area)
+            overlay.show()
+            self._area_overlays.append(overlay)
+
+    def _close_area_overlays(self):
+        for overlay in self._area_overlays:
+            overlay.close()
+        self._area_overlays = []
+
+    def _delete_area(self, index):
+        if regions.remove(index):
+            self.status_label.setText(
+                f"Restricted area deleted - {regions.count()} left"
+            )
+        # Rebuild the overlays (indices shifted)
+        if self.show_areas_btn.isChecked():
+            self._open_area_overlays()
+
+    def clear_restricted_areas(self):
+        """Remove every restricted area (used by the tray menu too)."""
+        regions.clear()
+        self._close_area_overlays()
+        if self.show_areas_btn.isChecked():
+            self.show_areas_btn.setChecked(False)
+        self.status_label.setText("All restricted areas cleared")
 
     def _show_restrict_menu(self):
         """Popup with per-screen restriction checkboxes (same as tray)."""
