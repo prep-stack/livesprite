@@ -84,9 +84,11 @@ anywhere and run the exe.
   no-go zone for every sprite. Walking sprites jump across the zone in
   their direction of travel (or bounce off when there is no room), and
   a sprite dropped inside a zone is nudged out. `Show restricted areas`
-  marks every zone in red on the desktop with an X button to delete it;
-  the tray menu has "Clear restricted areas". Zones are stored in
-  `config/regions.json` and survive program updates.
+  marks every zone in red on the desktop - the marks are click-through
+  (clicks land on whatever is underneath), only the small X button that
+  deletes a zone is clickable; the tray menu has "Clear restricted
+  areas". Zones are stored in `config/regions.json` and survive program
+  updates.
 - **Start with Windows**: on by default. Uses the per-user registry Run
   key, no admin rights needed. The checkbox in the manager window only
   appears when autostart is actually off (checked against the registry) -

@@ -591,8 +591,13 @@ class MainWindow(QMainWindow):
             if was_visible:
                 self.showNormal()
                 self.raise_()
+            # "Draw it and it's done": no overlays after picking.  The
+            # user presses 'Show restricted areas' when they want to see
+            # them - so reset the toggle instead of re-opening overlays.
             if self.show_areas_btn.isChecked():
-                self._open_area_overlays()
+                self.show_areas_btn.blockSignals(True)
+                self.show_areas_btn.setChecked(False)
+                self.show_areas_btn.blockSignals(False)
 
         self._picker = RegionPickerOverlay(picked, cancelled)
         self._picker.open()

@@ -137,8 +137,11 @@ class RegionPickerOverlay(QWidget):
 class RegionDisplayOverlay(QWidget):
     """Red overlay marking one saved restricted area on the desktop.
 
-    Shows the region index and size, plus an X button that deletes the
-    region via the `on_delete` callback.
+    The overlay itself is *click-through* (Qt.WindowTransparentForInput):
+    mouse clicks land on whatever is underneath, so it never blocks the
+    manager window or anything else.  Because a click-through window
+    cannot host a clickable button, the X delete button is a separate
+    tiny always-on-top window pinned to the region's top-right corner.
     """
 
     def __init__(self, index, rect, on_delete):
@@ -148,25 +151,41 @@ class RegionDisplayOverlay(QWidget):
 
         self.setWindowFlags(
             Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+            | Qt.WindowTransparentForInput   # <- click-through
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setGeometry(rect)
 
-        self.delete_btn = QPushButton("\u2715", self)
+        # Companion delete button: its own small window (NOT click-through)
+        self.delete_btn = QPushButton("\u2715")
         self.delete_btn.setObjectName("roundNeutralBtn")
+        self.delete_btn.setWindowFlags(
+            Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+        )
+        self.delete_btn.setAttribute(Qt.WA_ShowWithoutActivating)
         self.delete_btn.setFixedSize(24, 24)
         self.delete_btn.setToolTip("Delete this restricted area")
         self.delete_btn.setCursor(Qt.PointingHandCursor)
-        self.delete_btn.move(max(2, rect.width() - 28), 4)
+        self.delete_btn.move(rect.x() + max(2, rect.width() - 28),
+                             rect.y() + 4)
         self.delete_btn.clicked.connect(self._delete)
+
+    def show(self):
+        super().show()
+        self.delete_btn.show()
+
+    def closeEvent(self, event):
+        self.delete_btn.close()
+        super().closeEvent(event)
 
     def _delete(self):
         self.on_delete(self.index)
 
     def paintEvent(self, _event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(233, 25, 22, 55))
+        # Light tint: this is only an indicator, not a wall
+        painter.fillRect(self.rect(), QColor(233, 25, 22, 35))
         pen = QPen(QColor(theme.LIVE_RED), 2)
         painter.setPen(pen)
         painter.drawRect(self.rect().adjusted(1, 1, -2, -2))
